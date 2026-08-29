@@ -1,0 +1,24 @@
+[
+  {
+    "article_id": "art_001",
+    "content_hash": "a1b2c3",
+    "url": "https://example-news.com/story-a",
+    "source": "Example Wire",
+    "title": "City council approves new transit line",
+    "body": "The city council voted 6-2 to approve funding for a new light rail line connecting downtown to the eastern suburbs...",
+    "published_at": "2026-08-20T09:00:00Z",
+    "scraped_at": "2026-08-20T10:00:00Z",
+    "embedding": null
+  },
+  {
+    "article_id": "art_002",
+    "content_hash": "d4e5f6",
+    "url": "https://another-outlet.com/transit-vote",
+    "source": "Another Outlet",
+    "title": "Transit expansion clears council hurdle",
+    "body": "In a closely watched vote, city councilors approved a controversial transit expansion plan...",
+    "published_at": "2026-08-20T11:30:00Z",
+    "scraped_at": "2026-08-20T16:00:00Z",
+    "embedding": null
+  }
+]
