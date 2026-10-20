@@ -1,96 +1,81 @@
-"""
-LangGraph orchestrator (owner: Akshat).
-
-Wires the four specialized agents into a fan-out / fan-in graph:
-
-            retrieve
-               |
-        +------+------+------+
-        |      |      |      |
-     claims  persp  timeline impact
-        |      |      |      |
-        +------+------+------+
-               |
-        report_generation
-
-Each agent node is a stub for now — teammates can build against
-AgentState from src/schemas/contracts.py without waiting on the
-real implementations here.
-"""
-
+from typing import TypedDict, List
 from langgraph.graph import StateGraph, START, END
-from src.schemas.contracts import AgentState
+
+from src.agents.claim_verification import extract_and_verify_claims
+from src.agents.perspective_analysis import analyze_perspective
+from src.agents.timeline_analysis import extract_timeline
+from src.agents.impact_analysis import analyze_impact
+from src.agents.report_generation import generate_final_report
+from src.schemas.contracts import AgentOutput, FinalReport
 
 
-# ---------------------------------------------------------------------------
-# Node stubs — replace bodies with real logic. Signature must stay the same.
-# ---------------------------------------------------------------------------
+class PipelineState(TypedDict):
+    query: str
+    content: str
+    source_urls: List[str]
+    claims: List[str]
+    perspective: str
+    timeline: List[str]
+    impact: str
+    final_report: FinalReport
 
-def retrieve(state: AgentState) -> AgentState:
-    """Pull relevant articles from the data store for this query."""
-    # TODO: embed query, similarity search against src/storage
-    return {"retrieved_articles": []}
+async def claim_node(state: PipelineState):
+    return {"claims": await extract_and_verify_claims(state["content"])}
 
+async def perspective_node(state: PipelineState):
+    return {"perspective": await analyze_perspective(state["content"])}
 
-def claim_verification(state: AgentState) -> AgentState:
-    return {"claims": []}
+async def timeline_node(state: PipelineState):
+    return {"timeline": await extract_timeline(state["content"])}
 
+async def impact_node(state: PipelineState):
+    return {"impact": await analyze_impact(state["content"])}
 
-def perspective_analysis(state: AgentState) -> AgentState:
-    return {"perspectives": []}
+async def synthesis_node(state: PipelineState):
+    agent_output = AgentOutput(
+        claims=state.get("claims", []),
+        perspective=state.get("perspective", ""),
+        timeline=state.get("timeline", []),
+        impact=state.get("impact", "")
+    )
+    report = await generate_final_report(
+        query=state["query"],
+        agent_output=agent_output,
+        source_urls=state.get("source_urls", [])
+    )
+    return {"final_report": report}
 
+# Compile Graph
+builder = StateGraph(PipelineState)
+builder.add_node("claims_agent", claim_node)
+builder.add_node("perspective_agent", perspective_node)
+builder.add_node("timeline_agent", timeline_node)
+builder.add_node("impact_agent", impact_node)
+builder.add_node("report_synthesizer", synthesis_node)
 
-def timeline_analysis(state: AgentState) -> AgentState:
-    return {"timeline": []}
+builder.add_edge(START, "claims_agent")
+builder.add_edge(START, "perspective_agent")
+builder.add_edge(START, "timeline_agent")
+builder.add_edge(START, "impact_agent")
 
+builder.add_edge("claims_agent", "report_synthesizer")
+builder.add_edge("perspective_agent", "report_synthesizer")
+builder.add_edge("timeline_agent", "report_synthesizer")
+builder.add_edge("impact_agent", "report_synthesizer")
 
-def impact_analysis(state: AgentState) -> AgentState:
-    return {"impacts": []}
+builder.add_edge("report_synthesizer", END)
+news_analysis_graph = builder.compile()
 
-
-def report_generation(state: AgentState) -> AgentState:
-    """Synthesizes all four agent outputs into a single Report."""
-    # TODO: build Report(...) from state["claims"], state["perspectives"], etc.
-    return {"report": None}
-
-
-# ---------------------------------------------------------------------------
-# Graph wiring
-# ---------------------------------------------------------------------------
-
-def build_graph() -> StateGraph:
-    graph = StateGraph(AgentState)
-
-    graph.add_node("retrieve", retrieve)
-    graph.add_node("claim_verification", claim_verification)
-    graph.add_node("perspective_analysis", perspective_analysis)
-    graph.add_node("timeline_analysis", timeline_analysis)
-    graph.add_node("impact_analysis", impact_analysis)
-    graph.add_node("report_generation", report_generation)
-
-    graph.add_edge(START, "retrieve")
-
-    # fan-out: all four agents run off the retrieved articles
-    for agent in [
-        "claim_verification",
-        "perspective_analysis",
-        "timeline_analysis",
-        "impact_analysis",
-    ]:
-        graph.add_edge("retrieve", agent)
-        # fan-in: all four must complete before report_generation runs
-        graph.add_edge(agent, "report_generation")
-
-    graph.add_edge("report_generation", END)
-
-    return graph
-
-
-def get_compiled_graph():
-    return build_graph().compile()
-
-
-if __name__ == "__main__":
-    app = get_compiled_graph()
-    result = app.invoke({"query": "example query", "story_id": "story_001"})
-    print(result)
+async def run_analysis_pipeline(query: str, aggregated_content: str, source_urls: List[str] = None) -> FinalReport:
+    initial_state = {
+        "query": query,
+        "content": aggregated_content,
+        "source_urls": source_urls or [],
+        "claims": [],
+        "perspective": "",
+        "timeline": [],
+        "impact": "",
+        "final_report": None
+    }
+    output_state = await news_analysis_graph.ainvoke(initial_state)
+    return output_state["final_report"]

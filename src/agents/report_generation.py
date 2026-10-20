@@ -28,6 +28,7 @@ async def generate_final_report(query: str, agent_output: AgentOutput, source_ur
             max_tokens=max_tok
         )
         summary = response.choices[0].message.content
+        
     except Exception as e:
         print(f"Error in report synthesis: {e}")
         summary = "Report synthesis encountered an error."
